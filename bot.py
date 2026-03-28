@@ -11,17 +11,14 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 sent = set()
 
 
-# ✅ SAFE REQUEST (WITH DEBUG)
+# ✅ SAFE REQUEST
 def safe_get(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
         print("Status:", r.status_code)
-
         if r.status_code != 200:
             return None
-
         return r
-
     except Exception as e:
         print("Request failed:", e)
         return None
@@ -33,7 +30,7 @@ def is_breaking(title):
     return any(word in title.lower() for word in keywords)
 
 
-# 🧠 SIMPLE SUMMARY
+# 🧠 SIMPLE SUMMARY (NO AI)
 def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
@@ -44,7 +41,7 @@ def get_score(upvotes, created):
     return upvotes / age_minutes
 
 
-# 🔴 REDDIT (MULTI-ENDPOINT + FALLBACK)
+# 🔴 REDDIT SCRAPER
 def scrape_reddit():
     urls = [
         "https://www.reddit.com/r/UFOs/new.json?limit=25",
@@ -73,7 +70,6 @@ def scrape_reddit():
                 upvotes = p["ups"]
                 created = p["created_utc"]
 
-                # ⏱ LAST 12 HOURS
                 if now - created > 43200:
                     continue
 
@@ -89,12 +85,10 @@ def scrape_reddit():
                 continue
 
         if posts:
-            break  # stop if one endpoint works
+            break
 
-    # 🚨 GUARANTEE OUTPUT
     if not posts:
         print("⚠️ No Reddit data — sending fallback")
-
         posts.append((
             "No fresh UFO posts detected — monitoring continues...",
             "https://reddit.com/r/UFOs",
@@ -105,7 +99,7 @@ def scrape_reddit():
     return posts[:5]
 
 
-# 🛸 GOOGLE NEWS (ALWAYS RETURNS)
+# 🛸 GOOGLE NEWS
 def scrape_news():
     url = "https://news.google.com/rss/search?q=UFO+OR+UAP+OR+aliens"
     r = safe_get(url)
@@ -131,7 +125,7 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     while True:
-        print("Running FINAL scraper...")
+        print("Running FINAL CLEAN scraper...")
 
         # 🔴 REDDIT
         try:
@@ -145,8 +139,7 @@ async def main():
                     f"🔥 {upvotes} upvotes\n\n"
                     f"{title}\n\n"
                     f"🧠 {summarize(title)}\n\n"
-                    f"🔗 {link}\n\n"
-                    f"⚡ Live updates every 2 min"
+                    f"🔗 {link}"
                 )
 
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
@@ -164,8 +157,7 @@ async def main():
                     f"{prefix}\n\n"
                     f"{title}\n\n"
                     f"🧠 {summarize(title)}\n\n"
-                    f"🔗 {link}\n\n"
-                    f"⚡ Stay updated"
+                    f"🔗 {link}"
                 )
 
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
@@ -173,7 +165,7 @@ async def main():
         except Exception as e:
             print("News error:", e)
 
-        await asyncio.sleep(120)  # ⏱ every 2 minutes
+        await asyncio.sleep(120)
 
 
 asyncio.run(main())
