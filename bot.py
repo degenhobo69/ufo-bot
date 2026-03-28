@@ -16,8 +16,10 @@ def safe_get(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
         print("Status:", r.status_code)
+
         if r.status_code != 200:
             return None
+
         return r
     except Exception as e:
         print("Request failed:", e)
@@ -30,7 +32,7 @@ def is_breaking(title):
     return any(word in title.lower() for word in keywords)
 
 
-# 🧠 SIMPLE SUMMARY (NO AI)
+# 🧠 SIMPLE SUMMARY
 def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
@@ -41,11 +43,11 @@ def get_score(upvotes, created):
     return upvotes / age_minutes
 
 
-# 🔴 REDDIT SCRAPER
-def scrape_reddit():
+# 🔴 GENERIC REDDIT SCRAPER
+def scrape_subreddit(subreddit):
     urls = [
-        "https://www.reddit.com/r/UFOs/new.json?limit=25",
-        "https://www.reddit.com/r/UFOs/hot.json?limit=25"
+        f"https://www.reddit.com/r/{subreddit}/new.json?limit=25",
+        f"https://www.reddit.com/r/{subreddit}/hot.json?limit=25"
     ]
 
     posts = []
@@ -70,6 +72,7 @@ def scrape_reddit():
                 upvotes = p["ups"]
                 created = p["created_utc"]
 
+                # ⏱ LAST 12 HOURS
                 if now - created > 43200:
                     continue
 
@@ -87,36 +90,6 @@ def scrape_reddit():
         if posts:
             break
 
-    if not posts:
-        print("⚠️ No Reddit data — sending fallback")
-        posts.append((
-            "No fresh UFO posts detected — monitoring continues...",
-            "https://reddit.com/r/UFOs",
-            0,
-            0
-        ))
-
-    return posts[:5]
-
-
-# 🛸 GOOGLE NEWS
-def scrape_news():
-    url = "https://news.google.com/rss/search?q=UFO+OR+UAP+OR+aliens"
-    r = safe_get(url)
-    if not r:
-        return []
-
-    import xml.etree.ElementTree as ET
-    root = ET.fromstring(r.content)
-
-    posts = []
-
-    for item in root.findall(".//item")[:5]:
-        title = item.find("title").text
-        link = item.find("link").text
-
-        posts.append((title, link))
-
     return posts
 
 
@@ -125,47 +98,53 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     while True:
-        print("Running FINAL CLEAN scraper...")
+        print("Running REDDIT UFO + ALIENS scraper...")
 
-        # 🔴 REDDIT
+        all_posts = []
+
         try:
-            for title, link, upvotes, score in scrape_reddit():
+            # 🛸 UFOs
+            all_posts += scrape_subreddit("UFOs")
 
-                prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 UFO SIGNAL"
-
-                msg = (
-                    f"{prefix}\n\n"
-                    f"📈 Momentum: {round(score,1)}\n"
-                    f"🔥 {upvotes} upvotes\n\n"
-                    f"{title}\n\n"
-                    f"🧠 {summarize(title)}\n\n"
-                    f"🔗 {link}"
-                )
-
-                await bot.send_message(chat_id=CHAT_ID, text=msg)
+            # 👽 Aliens
+            all_posts += scrape_subreddit("aliens")
 
         except Exception as e:
-            print("Reddit error:", e)
+            print("Scraping error:", e)
 
-        # 🛸 NEWS
-        try:
-            for title, link in scrape_news():
+        # 🚨 FORCE CONTENT IF EMPTY
+        if not all_posts:
+            print("⚠️ No data — fallback triggered")
+            all_posts.append((
+                "Monitoring UFO & alien activity... no major signals yet.",
+                "https://reddit.com/r/UFOs",
+                0,
+                0
+            ))
 
-                prefix = "🚨 BREAKING NEWS" if is_breaking(title) else "🛸 UFO NEWS"
+        # 🔥 LIMIT
+        all_posts = all_posts[:6]
 
-                msg = (
-                    f"{prefix}\n\n"
-                    f"{title}\n\n"
-                    f"🧠 {summarize(title)}\n\n"
-                    f"🔗 {link}"
-                )
+        # 📤 SEND
+        for title, link, upvotes, score in all_posts:
 
+            prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 UFO / ALIEN SIGNAL"
+
+            msg = (
+                f"{prefix}\n\n"
+                f"📈 Momentum: {round(score,1)}\n"
+                f"🔥 {upvotes} upvotes\n\n"
+                f"{title}\n\n"
+                f"🧠 {summarize(title)}\n\n"
+                f"🔗 {link}"
+            )
+
+            try:
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
+            except Exception as e:
+                print("Telegram error:", e)
 
-        except Exception as e:
-            print("News error:", e)
-
-        await asyncio.sleep(120)
+        await asyncio.sleep(120)  # every 2 minutes
 
 
 asyncio.run(main())
