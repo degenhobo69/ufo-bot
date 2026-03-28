@@ -11,11 +11,19 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 sent = set()
 
 
-# ✅ SAFE REQUEST
+# ✅ SAFE REQUEST (WITH DEBUG)
 def safe_get(url):
     try:
-        return requests.get(url, headers=HEADERS, timeout=10)
-    except:
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        print("Status:", r.status_code)
+
+        if r.status_code != 200:
+            return None
+
+        return r
+
+    except Exception as e:
+        print("Request failed:", e)
         return None
 
 
@@ -36,60 +44,68 @@ def get_score(upvotes, created):
     return upvotes / age_minutes
 
 
-# 🔴 AGGRESSIVE REDDIT SCRAPER
+# 🔴 REDDIT (MULTI-ENDPOINT + FALLBACK)
 def scrape_reddit():
-    url = "https://www.reddit.com/r/UFOs/new.json?limit=30"
-    r = safe_get(url)
-    if not r:
-        return []
+    urls = [
+        "https://www.reddit.com/r/UFOs/new.json?limit=25",
+        "https://www.reddit.com/r/UFOs/hot.json?limit=25"
+    ]
 
     posts = []
     now = time.time()
 
-    for post in r.json()["data"]["children"]:
+    for url in urls:
+        r = safe_get(url)
+        if not r:
+            continue
+
         try:
-            p = post["data"]
-
-            title = p["title"]
-            link = "https://reddit.com" + p["permalink"]
-            upvotes = p["ups"]
-            created = p["created_utc"]
-
-            # ⏱ LAST 6 HOURS
-            if now - created > 21600:
-                continue
-
-            score = get_score(upvotes, created)
-
-            # 🔥 VERY LOW THRESHOLD (AGGRESSIVE)
-            if score > 0.3:
-                if link not in sent:
-                    posts.append((title, link, upvotes, score))
-                    sent.add(link)
-
+            data = r.json()
         except:
             continue
 
-    # 🚨 FORCE CONTENT IF EMPTY
-    if not posts:
-        for post in r.json()["data"]["children"][:3]:
+        for post in data["data"]["children"]:
             try:
                 p = post["data"]
+
                 title = p["title"]
                 link = "https://reddit.com" + p["permalink"]
                 upvotes = p["ups"]
-                score = get_score(upvotes, p["created_utc"])
+                created = p["created_utc"]
 
-                if link not in sent:
-                    posts.append((title, link, upvotes, score))
-                    sent.add(link)
+                # ⏱ LAST 12 HOURS
+                if now - created > 43200:
+                    continue
+
+                if link in sent:
+                    continue
+
+                score = get_score(upvotes, created)
+
+                posts.append((title, link, upvotes, score))
+                sent.add(link)
+
             except:
                 continue
+
+        if posts:
+            break  # stop if one endpoint works
+
+    # 🚨 GUARANTEE OUTPUT
+    if not posts:
+        print("⚠️ No Reddit data — sending fallback")
+
+        posts.append((
+            "No fresh UFO posts detected — monitoring continues...",
+            "https://reddit.com/r/UFOs",
+            0,
+            0
+        ))
 
     return posts[:5]
 
 
-# 🛸 GOOGLE NEWS
+# 🛸 GOOGLE NEWS (ALWAYS RETURNS)
 def scrape_news():
     url = "https://news.google.com/rss/search?q=UFO+OR+UAP+OR+aliens"
     r = safe_get(url)
@@ -105,9 +121,7 @@ def scrape_news():
         title = item.find("title").text
         link = item.find("link").text
 
-        if link not in sent:
-            posts.append((title, link))
-            sent.add(link)
+        posts.append((title, link))
 
     return posts
 
@@ -117,13 +131,13 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     while True:
-        print("Running AGGRESSIVE scraper...")
+        print("Running FINAL scraper...")
 
         # 🔴 REDDIT
         try:
             for title, link, upvotes, score in scrape_reddit():
 
-                prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 EARLY UFO SIGNAL"
+                prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 UFO SIGNAL"
 
                 msg = (
                     f"{prefix}\n\n"
@@ -132,7 +146,7 @@ async def main():
                     f"{title}\n\n"
                     f"🧠 {summarize(title)}\n\n"
                     f"🔗 {link}\n\n"
-                    f"⚡ Join for real-time UFO alerts"
+                    f"⚡ Live updates every 2 min"
                 )
 
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
