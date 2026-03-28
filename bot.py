@@ -30,15 +30,15 @@ def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
 
-# 🔥 VIRAL SCORE (RELAXED)
+# 🔥 MOMENTUM SCORE
 def get_score(upvotes, created):
     age_minutes = max((time.time() - created) / 60, 1)
     return upvotes / age_minutes
 
 
-# 🔴 REDDIT (FIXED)
+# 🔴 AGGRESSIVE REDDIT SCRAPER
 def scrape_reddit():
-    url = "https://www.reddit.com/r/UFOs/new.json?limit=25"
+    url = "https://www.reddit.com/r/UFOs/new.json?limit=30"
     r = safe_get(url)
     if not r:
         return []
@@ -55,30 +55,41 @@ def scrape_reddit():
             upvotes = p["ups"]
             created = p["created_utc"]
 
-            # ⏱ ONLY LAST 90 MINUTES
-            if now - created > 5400:
+            # ⏱ LAST 6 HOURS
+            if now - created > 21600:
                 continue
 
-            # 🔥 RELAXED FILTER (MORE SIGNALS)
             score = get_score(upvotes, created)
 
-            if score < 1.5:   # MUCH LOWER = more alerts
-                continue
-
-            # 🚫 prevent duplicates during runtime
-            if link in sent:
-                continue
-
-            posts.append((title, link, upvotes, score))
-            sent.add(link)
+            # 🔥 VERY LOW THRESHOLD (AGGRESSIVE)
+            if score > 0.3:
+                if link not in sent:
+                    posts.append((title, link, upvotes, score))
+                    sent.add(link)
 
         except:
             continue
 
+    # 🚨 FORCE CONTENT IF EMPTY
+    if not posts:
+        for post in r.json()["data"]["children"][:3]:
+            try:
+                p = post["data"]
+                title = p["title"]
+                link = "https://reddit.com" + p["permalink"]
+                upvotes = p["ups"]
+                score = get_score(upvotes, p["created_utc"])
+
+                if link not in sent:
+                    posts.append((title, link, upvotes, score))
+                    sent.add(link)
+            except:
+                continue
+
     return posts[:5]
 
 
-# 🛸 NEWS (TIME FILTER)
+# 🛸 GOOGLE NEWS
 def scrape_news():
     url = "https://news.google.com/rss/search?q=UFO+OR+UAP+OR+aliens"
     r = safe_get(url)
@@ -94,11 +105,9 @@ def scrape_news():
         title = item.find("title").text
         link = item.find("link").text
 
-        if link in sent:
-            continue
-
-        posts.append((title, link))
-        sent.add(link)
+        if link not in sent:
+            posts.append((title, link))
+            sent.add(link)
 
     return posts
 
@@ -108,12 +117,11 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     while True:
-        print("Running ELITE FIXED scraper...")
+        print("Running AGGRESSIVE scraper...")
 
+        # 🔴 REDDIT
         try:
-            reddit_posts = scrape_reddit()
-
-            for title, link, upvotes, score in reddit_posts:
+            for title, link, upvotes, score in scrape_reddit():
 
                 prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 EARLY UFO SIGNAL"
 
@@ -132,10 +140,9 @@ async def main():
         except Exception as e:
             print("Reddit error:", e)
 
+        # 🛸 NEWS
         try:
-            news_posts = scrape_news()
-
-            for title, link in news_posts:
+            for title, link in scrape_news():
 
                 prefix = "🚨 BREAKING NEWS" if is_breaking(title) else "🛸 UFO NEWS"
 
@@ -152,7 +159,7 @@ async def main():
         except Exception as e:
             print("News error:", e)
 
-        await asyncio.sleep(180)  # every 3 minutes
+        await asyncio.sleep(120)  # ⏱ every 2 minutes
 
 
 asyncio.run(main())
