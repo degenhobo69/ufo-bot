@@ -1,6 +1,5 @@
 import asyncio
 import requests
-import json
 import time
 from telegram import Bot
 
@@ -8,25 +7,8 @@ BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
 CHAT_ID = "527677115"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-DATA_FILE = "data.json"
 
-
-# ✅ LOAD / SAVE
-def load_data():
-    try:
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {"sent": []}
-
-
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
-
-
-data = load_data()
-sent = set(data["sent"])
+sent = set()
 
 
 # ✅ SAFE REQUEST
@@ -43,21 +25,18 @@ def is_breaking(title):
     return any(word in title.lower() for word in keywords)
 
 
-# 🧠 SMART SUMMARY
+# 🧠 SIMPLE SUMMARY
 def summarize(text):
-    words = text.split()
-    short = " ".join(words[:10])
-
-    return f"{short}..."
+    return " ".join(text.split()[:10]) + "..."
 
 
-# 🔥 VIRAL SCORE (KEY FEATURE)
+# 🔥 VIRAL SCORE (RELAXED)
 def get_score(upvotes, created):
     age_minutes = max((time.time() - created) / 60, 1)
     return upvotes / age_minutes
 
 
-# 🔴 REDDIT ELITE SCRAPER
+# 🔴 REDDIT (FIXED)
 def scrape_reddit():
     url = "https://www.reddit.com/r/UFOs/new.json?limit=25"
     r = safe_get(url)
@@ -76,31 +55,30 @@ def scrape_reddit():
             upvotes = p["ups"]
             created = p["created_utc"]
 
-            # ⏱ ONLY LAST 3 HOURS
-            if now - created > 10800:
+            # ⏱ ONLY LAST 90 MINUTES
+            if now - created > 5400:
                 continue
 
-            # 📈 VIRAL SCORE
+            # 🔥 RELAXED FILTER (MORE SIGNALS)
             score = get_score(upvotes, created)
 
-            # 🔥 ELITE FILTER (early + strong growth)
-            if score < 5:
+            if score < 1.5:   # MUCH LOWER = more alerts
                 continue
 
-            if link not in sent:
-                posts.append((title, link, upvotes, score))
-                sent.add(link)
+            # 🚫 prevent duplicates during runtime
+            if link in sent:
+                continue
+
+            posts.append((title, link, upvotes, score))
+            sent.add(link)
 
         except:
             continue
 
-    # sort by score (best first)
-    posts.sort(key=lambda x: x[3], reverse=True)
-
     return posts[:5]
 
 
-# 🛸 NEWS
+# 🛸 NEWS (TIME FILTER)
 def scrape_news():
     url = "https://news.google.com/rss/search?q=UFO+OR+UAP+OR+aliens"
     r = safe_get(url)
@@ -112,13 +90,15 @@ def scrape_news():
 
     posts = []
 
-    for item in root.findall(".//item")[:3]:
+    for item in root.findall(".//item")[:5]:
         title = item.find("title").text
         link = item.find("link").text
 
-        if link not in sent:
-            posts.append((title, link))
-            sent.add(link)
+        if link in sent:
+            continue
+
+        posts.append((title, link))
+        sent.add(link)
 
     return posts
 
@@ -128,16 +108,14 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     while True:
-        print("Running ELITE scraper...")
+        print("Running ELITE FIXED scraper...")
 
-        # 🔴 REDDIT
         try:
-            for title, link, upvotes, score in scrape_reddit():
+            reddit_posts = scrape_reddit()
 
-                if is_breaking(title):
-                    prefix = "🚨 BREAKING UFO INTEL"
-                else:
-                    prefix = "🛸 EARLY UFO SIGNAL"
+            for title, link, upvotes, score in reddit_posts:
+
+                prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 EARLY UFO SIGNAL"
 
                 msg = (
                     f"{prefix}\n\n"
@@ -154,21 +132,19 @@ async def main():
         except Exception as e:
             print("Reddit error:", e)
 
-        # 🛸 NEWS
         try:
-            for title, link in scrape_news():
+            news_posts = scrape_news()
 
-                if is_breaking(title):
-                    prefix = "🚨 BREAKING NEWS"
-                else:
-                    prefix = "🛸 UFO NEWS"
+            for title, link in news_posts:
+
+                prefix = "🚨 BREAKING NEWS" if is_breaking(title) else "🛸 UFO NEWS"
 
                 msg = (
                     f"{prefix}\n\n"
                     f"{title}\n\n"
                     f"🧠 {summarize(title)}\n\n"
                     f"🔗 {link}\n\n"
-                    f"⚡ Stay updated with real-time alerts"
+                    f"⚡ Stay updated"
                 )
 
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
@@ -176,11 +152,7 @@ async def main():
         except Exception as e:
             print("News error:", e)
 
-        # 💾 SAVE
-        data["sent"] = list(sent)
-        save_data(data)
-
-        await asyncio.sleep(180)
+        await asyncio.sleep(180)  # every 3 minutes
 
 
 asyncio.run(main())
