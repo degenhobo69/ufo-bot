@@ -1,12 +1,9 @@
 import asyncio
 import requests
 from telegram import Bot
-from openai import OpenAI
 
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
 CHAT_ID = "527677115"
-
-client = OpenAI()
 
 sent = set()
 
@@ -23,14 +20,31 @@ def safe_get(url):
         return None
 
 
-# 🔥 BREAKING DETECTION
+# 🚨 BREAKING DETECTION
 def is_breaking(title):
     keywords = ["breaking", "just in", "leak", "confirmed", "pentagon", "urgent"]
     title_lower = title.lower()
     return any(word in title_lower for word in keywords)
 
 
-# 🔴 REDDIT (TOP 5% FILTER)
+# 🧠 SMART (NO-AI) SUMMARY
+def summarize(text):
+    words = text.split()
+    short = " ".join(words[:12])
+
+    if "ufo" in text.lower():
+        return f"Sighting gaining attention. {short}..."
+    elif "pentagon" in text.lower():
+        return f"Government UFO activity reported. {short}..."
+    elif "alien" in text.lower():
+        return f"Possible extraterrestrial discussion trending. {short}..."
+    elif "leak" in text.lower():
+        return f"Potential leak or insider info. {short}..."
+    else:
+        return f"Trending UFO report. {short}..."
+
+
+# 🔴 REDDIT (TOP 5% POSTS)
 def scrape_reddit():
     url = "https://www.reddit.com/r/UFOs/top.json?t=day&limit=20"
     r = safe_get(url)
@@ -47,7 +61,7 @@ def scrape_reddit():
             link = "https://reddit.com" + p["permalink"]
             upvotes = p["ups"]
 
-            # 🔥 TOP 5% (strict filter)
+            # 🔥 TOP 5% FILTER
             if upvotes > 1500:
                 if link not in sent:
                     posts.append((title, link, upvotes))
@@ -76,26 +90,10 @@ def scrape_news():
         link = item.find("link").text
 
         if link not in sent:
-            posts.append((title, link, 0))
+            posts.append((title, link))
             sent.add(link)
 
     return posts
-
-
-# 🧠 AI SUMMARY
-def summarize(text):
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Summarize this UFO news in 1-2 short punchy lines, make it engaging."},
-                {"role": "user", "content": text}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        print("AI error:", e)
-        return ""
 
 
 # 🚀 MAIN LOOP
@@ -123,7 +121,7 @@ async def main():
 
         # 🛸 NEWS
         try:
-            for title, link, _ in scrape_news():
+            for title, link in scrape_news():
                 summary = summarize(title)
 
                 if is_breaking(title):
@@ -137,7 +135,7 @@ async def main():
         except Exception as e:
             print("News error:", e)
 
-        await asyncio.sleep(180)  # ⏱ 3 minutes
+        await asyncio.sleep(180)  # ⏱ every 3 minutes
 
 
 asyncio.run(main())
