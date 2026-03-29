@@ -4,28 +4,19 @@ import time
 from telegram import Bot
 
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
-CHAT_ID = "@ufoalerts"  # or your user ID
-
-# ✅ STRONG HEADERS (BYPASS REDDIT BLOCK)
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
-    "Accept": "application/json",
-    "Referer": "https://www.reddit.com/"
-}
+CHAT_ID = "@ufoalerts"
 
 sent = set()
 
 
-# ✅ SAFE REQUEST WITH DEBUG
+# ✅ SAFE REQUEST (NO HEADERS NEEDED NOW)
 def safe_get(url):
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = requests.get(url, timeout=10)
         print("Status:", r.status_code)
-
         if r.status_code != 200:
             return None
-
-        return r
+        return r.json()
     except Exception as e:
         print("Request failed:", e)
         return None
@@ -42,60 +33,45 @@ def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
 
-# 🔥 MOMENTUM SCORE
+# 🔥 SCORE
 def get_score(upvotes, created):
     age_minutes = max((time.time() - created) / 60, 1)
     return upvotes / age_minutes
 
 
-# 🔴 REDDIT SCRAPER (FIXED ENDPOINT)
+# 🔴 REDDIT VIA MIRROR (NO BLOCK)
 def scrape_subreddit(subreddit):
-    urls = [
-        f"https://api.reddit.com/r/{subreddit}/new?limit=25",
-        f"https://api.reddit.com/r/{subreddit}/hot?limit=25"
-    ]
+    url = f"https://api.pushshift.io/reddit/search/submission/?subreddit={subreddit}&size=20&sort=desc&sort_type=created"
+
+    data = safe_get(url)
+    if not data:
+        return []
 
     posts = []
     now = time.time()
 
-    for url in urls:
-        r = safe_get(url)
-        if not r:
-            continue
-
+    for p in data["data"]:
         try:
-            data = r.json()
-        except:
-            continue
+            title = p["title"]
+            link = "https://reddit.com" + p["permalink"]
+            upvotes = p.get("score", 0)
+            created = p["created_utc"]
 
-        for post in data["data"]["children"]:
-            try:
-                p = post["data"]
-
-                title = p["title"]
-                link = "https://reddit.com" + p["permalink"]
-                upvotes = p["ups"]
-                created = p["created_utc"]
-
-                # ⏱ LAST 12 HOURS
-                if now - created > 43200:
-                    continue
-
-                if link in sent:
-                    continue
-
-                score = get_score(upvotes, created)
-
-                # 🔥 AGGRESSIVE FILTER
-                if score > 0.2:
-                    posts.append((title, link, upvotes, score))
-                    sent.add(link)
-
-            except:
+            # ⏱ LAST 12 HOURS
+            if now - created > 43200:
                 continue
 
-        if posts:
-            break
+            if link in sent:
+                continue
+
+            score = get_score(upvotes, created)
+
+            if score > 0.1:  # VERY AGGRESSIVE
+                posts.append((title, link, upvotes, score))
+                sent.add(link)
+
+        except:
+            continue
 
     return posts
 
@@ -105,9 +81,7 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
 
     while True:
-        print("Running REDDIT UFO + ALIENS scraper...")
-
-        await asyncio.sleep(5)  # 👈 anti-block delay
+        print("Running STABLE scraper...")
 
         all_posts = []
 
@@ -117,7 +91,7 @@ async def main():
         except Exception as e:
             print("Scraping error:", e)
 
-        # 🚨 FALLBACK (NEVER SILENT)
+        # 🚨 FALLBACK
         if not all_posts:
             print("⚠️ No data — fallback triggered")
             all_posts.append((
@@ -127,10 +101,8 @@ async def main():
                 0
             ))
 
-        # 🔥 LIMIT
-        all_posts = all_posts[:6]
+        all_posts = all_posts[:5]
 
-        # 📤 SEND
         for title, link, upvotes, score in all_posts:
 
             prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 UFO / ALIEN SIGNAL"
@@ -149,7 +121,7 @@ async def main():
             except Exception as e:
                 print("Telegram error:", e)
 
-        await asyncio.sleep(120)  # every 2 minutes
+        await asyncio.sleep(180)  # every 3 minutes
 
 
 asyncio.run(main())
