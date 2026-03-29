@@ -1,4 +1,4 @@
-print("🚀 VERSION 4 LIVE (NO BLOCK) 🚀")
+print("🚀 VERSION 6 LIVE (VIRAL SPIKE DETECTOR) 🚀")
 
 import asyncio
 import requests
@@ -9,28 +9,27 @@ from telegram import Bot
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
 CHAT_ID = "@ufoalerts"
 
-sent = {}
+seen_posts = {}
+last_heartbeat = 0
 
 
-# 🚨 BREAKING DETECTION
+# 🚨 BREAKING KEYWORDS
 def is_breaking(title):
     keywords = ["breaking", "leak", "confirmed", "pentagon", "urgent"]
-    return any(word in title.lower() for word in keywords)
+    return any(k in title.lower() for k in keywords)
 
 
-# 🧠 SIMPLE SUMMARY
+# 🧠 SUMMARY
 def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
 
-# 🔴 RSS VIA PROXY (NO RATE LIMIT)
+# 🔴 RSS SCRAPER
 def scrape_rss(subreddit):
-    url = f"https://r.jina.ai/http://www.reddit.com/r/{subreddit}/new/.rss"
+    url = f"https://www.reddit.com/r/{subreddit}/new/.rss"
 
     try:
         r = requests.get(url, timeout=10)
-        print(f"Proxy RSS ({subreddit}):", r.status_code)
-
         if r.status_code != 200:
             return []
 
@@ -41,66 +40,95 @@ def scrape_rss(subreddit):
             title = item.find("title").text
             link = item.find("link").text
 
-            # allow resend after 30 min
-            if link in sent and time.time() - sent[link] < 1800:
-                continue
-
             posts.append((title, link))
-            sent[link] = time.time()
 
         return posts
 
-    except Exception as e:
-        print("RSS error:", e)
+    except:
         return []
 
 
 # 🚀 MAIN LOOP
 async def main():
-    bot = Bot(token=BOT_TOKEN)
+    global last_heartbeat
 
+    bot = Bot(token=BOT_TOKEN)
     subs = ["UFOs", "aliens", "HighStrangeness"]
 
     while True:
-        print("Running PROXY scraper (NO BLOCK)...")
+        print("Scanning for viral spikes...")
 
-        all_posts = []
+        detected_signals = []
 
-        try:
-            for sub in subs:
-                all_posts += scrape_rss(sub)
-                await asyncio.sleep(2)
-        except Exception as e:
-            print("Scraping error:", e)
+        for sub in subs:
+            posts = scrape_rss(sub)
+            now = time.time()
 
-        # fallback (never silent)
-        if not all_posts:
-            print("⚠️ No data — fallback triggered")
-            all_posts.append((
-                "🛸 Monitoring UFO & alien activity… stay tuned for signals",
-                "https://reddit.com/r/UFOs"
-            ))
+            for title, link in posts:
 
-        all_posts = all_posts[:5]
+                # first time seen
+                if link not in seen_posts:
+                    seen_posts[link] = {
+                        "first_seen": now,
+                        "count": 1
+                    }
+                    continue
 
-        for title, link in all_posts:
+                # seen again → possible spike
+                seen_posts[link]["count"] += 1
+                age = now - seen_posts[link]["first_seen"]
 
-            prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 UFO / ALIEN SIGNAL"
+                # 🚨 SPIKE CONDITION
+                if (
+                    seen_posts[link]["count"] >= 2 and
+                    age < 600  # within 10 minutes
+                ):
+                    detected_signals.append((title, link))
+
+            await asyncio.sleep(2)
+
+        # 🚨 SEND SIGNALS
+        if detected_signals:
+            print("🚨 VIRAL SPIKE DETECTED")
+
+            for title, link in detected_signals[:3]:
+
+                if is_breaking(title):
+                    prefix = "🚨 BREAKING UFO INTEL"
+                else:
+                    prefix = "⚡ VIRAL SPIKE DETECTED"
+
+                msg = (
+                    f"{prefix}\n\n"
+                    f"{title}\n\n"
+                    f"🧠 {summarize(title)}\n\n"
+                    f"🔗 {link}\n\n"
+                    f"⚡ Join: https://t.me/yourchannelname"
+                )
+
+                try:
+                    await bot.send_message(chat_id=CHAT_ID, text=msg)
+                except Exception as e:
+                    print("Telegram error:", e)
+
+        # 💓 HEARTBEAT (20 min)
+        if time.time() - last_heartbeat > 1200:
+            print("💓 Heartbeat")
 
             msg = (
-                f"{prefix}\n\n"
-                f"{title}\n\n"
-                f"🧠 {summarize(title)}\n\n"
-                f"🔗 {link}\n\n"
-                f"⚡ Join: https://t.me/ufoalerts"
+                "🛸 Monitoring UFO & alien activity...\n\n"
+                "Scanning for viral spikes ⚡\n\n"
+                "Standby 🚨\n\n"
+                "⚡ Join: https://t.me/ufoalerts"
             )
 
             try:
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
-            except Exception as e:
-                print("Telegram error:", e)
+                last_heartbeat = time.time()
+            except:
+                pass
 
-        await asyncio.sleep(180)
+        await asyncio.sleep(120)
 
 
 asyncio.run(main())
