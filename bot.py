@@ -1,19 +1,18 @@
-print("🚀 VERSION 6 LIVE (VIRAL SPIKE DETECTOR) 🚀")
+print("🚀 VERSION 8 LIVE (CONFIDENCE ENGINE) 🚀")
 
 import asyncio
 import requests
 import time
-import xml.etree.ElementTree as ET
 from telegram import Bot
 
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
 CHAT_ID = "@ufoalerts"
 
-seen_posts = {}
+seen = {}
 last_heartbeat = 0
 
 
-# 🚨 BREAKING KEYWORDS
+# 🚨 BREAKING
 def is_breaking(title):
     keywords = ["breaking", "leak", "confirmed", "pentagon", "urgent"]
     return any(k in title.lower() for k in keywords)
@@ -24,22 +23,42 @@ def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
 
-# 🔴 RSS SCRAPER
-def scrape_rss(subreddit):
-    url = f"https://www.reddit.com/r/{subreddit}/new/.rss"
+# 📊 CONFIDENCE SCORE
+def get_confidence(count, age, breaking):
+    score = 0
+
+    # 🔁 repetition weight
+    score += min(count * 25, 60)
+
+    # ⏱ speed boost (faster = higher)
+    if age < 300:
+        score += 25
+    elif age < 600:
+        score += 15
+
+    # 🚨 breaking boost
+    if breaking:
+        score += 15
+
+    return min(score, 100)
+
+
+# 🔴 FETCH VIA PROXY
+def fetch_posts(sub):
+    url = f"https://api.allorigins.win/get?url=https://www.reddit.com/r/{sub}/new.json"
 
     try:
         r = requests.get(url, timeout=10)
         if r.status_code != 200:
             return []
 
-        root = ET.fromstring(r.content)
+        data = r.json()["contents"]
+        data = eval(data)
+
         posts = []
-
-        for item in root.findall(".//item")[:10]:
-            title = item.find("title").text
-            link = item.find("link").text
-
+        for p in data["data"]["children"][:10]:
+            title = p["data"]["title"]
+            link = "https://reddit.com" + p["data"]["permalink"]
             posts.append((title, link))
 
         return posts
@@ -56,50 +75,43 @@ async def main():
     subs = ["UFOs", "aliens", "HighStrangeness"]
 
     while True:
-        print("Scanning for viral spikes...")
+        print("Scanning with confidence engine...")
 
-        detected_signals = []
+        signals = []
+        now = time.time()
 
         for sub in subs:
-            posts = scrape_rss(sub)
-            now = time.time()
+            posts = fetch_posts(sub)
 
             for title, link in posts:
 
-                # first time seen
-                if link not in seen_posts:
-                    seen_posts[link] = {
-                        "first_seen": now,
-                        "count": 1
-                    }
+                if link not in seen:
+                    seen[link] = {"time": now, "count": 1}
                     continue
 
-                # seen again → possible spike
-                seen_posts[link]["count"] += 1
-                age = now - seen_posts[link]["first_seen"]
+                seen[link]["count"] += 1
+                age = now - seen[link]["time"]
 
-                # 🚨 SPIKE CONDITION
-                if (
-                    seen_posts[link]["count"] >= 2 and
-                    age < 600  # within 10 minutes
-                ):
-                    detected_signals.append((title, link))
+                breaking = is_breaking(title)
+                confidence = get_confidence(seen[link]["count"], age, breaking)
+
+                # ⚡ SIGNAL THRESHOLD
+                if confidence >= 60:
+                    signals.append((title, link, confidence))
 
             await asyncio.sleep(2)
 
         # 🚨 SEND SIGNALS
-        if detected_signals:
-            print("🚨 VIRAL SPIKE DETECTED")
+        if signals:
+            print("🚨 HIGH CONFIDENCE SIGNAL")
 
-            for title, link in detected_signals[:3]:
+            for title, link, confidence in signals[:3]:
 
-                if is_breaking(title):
-                    prefix = "🚨 BREAKING UFO INTEL"
-                else:
-                    prefix = "⚡ VIRAL SPIKE DETECTED"
+                prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "⚡ VIRAL SIGNAL"
 
                 msg = (
                     f"{prefix}\n\n"
+                    f"📊 Confidence: {confidence}%\n\n"
                     f"{title}\n\n"
                     f"🧠 {summarize(title)}\n\n"
                     f"🔗 {link}\n\n"
@@ -111,20 +123,20 @@ async def main():
                 except Exception as e:
                     print("Telegram error:", e)
 
-        # 💓 HEARTBEAT (20 min)
-        if time.time() - last_heartbeat > 1200:
+        # 💓 HEARTBEAT
+        if now - last_heartbeat > 1200:
             print("💓 Heartbeat")
 
             msg = (
-                "🛸 Monitoring UFO & alien activity...\n\n"
-                "Scanning for viral spikes ⚡\n\n"
-                "Standby 🚨\n\n"
+                "🛸 Monitoring UFO activity...\n\n"
+                "AI Confidence Engine Active 📊\n\n"
+                "Scanning for high-probability signals ⚡\n\n"
                 "⚡ Join: https://t.me/ufoalerts"
             )
 
             try:
                 await bot.send_message(chat_id=CHAT_ID, text=msg)
-                last_heartbeat = time.time()
+                last_heartbeat = now
             except:
                 pass
 
