@@ -4,14 +4,19 @@ import time
 from telegram import Bot
 
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
-CHAT_ID = "@ufoalerts"
+CHAT_ID = "@ufoalerts"  # or your user ID
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+# ✅ STRONG HEADERS (BYPASS REDDIT BLOCK)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1",
+    "Accept": "application/json",
+    "Referer": "https://www.reddit.com/"
+}
 
 sent = set()
 
 
-# ✅ SAFE REQUEST
+# ✅ SAFE REQUEST WITH DEBUG
 def safe_get(url):
     try:
         r = requests.get(url, headers=HEADERS, timeout=10)
@@ -43,11 +48,11 @@ def get_score(upvotes, created):
     return upvotes / age_minutes
 
 
-# 🔴 GENERIC REDDIT SCRAPER
+# 🔴 REDDIT SCRAPER (FIXED ENDPOINT)
 def scrape_subreddit(subreddit):
     urls = [
-        f"https://www.reddit.com/r/{subreddit}/new.json?limit=25",
-        f"https://www.reddit.com/r/{subreddit}/hot.json?limit=25"
+        f"https://api.reddit.com/r/{subreddit}/new?limit=25",
+        f"https://api.reddit.com/r/{subreddit}/hot?limit=25"
     ]
 
     posts = []
@@ -81,8 +86,10 @@ def scrape_subreddit(subreddit):
 
                 score = get_score(upvotes, created)
 
-                posts.append((title, link, upvotes, score))
-                sent.add(link)
+                # 🔥 AGGRESSIVE FILTER
+                if score > 0.2:
+                    posts.append((title, link, upvotes, score))
+                    sent.add(link)
 
             except:
                 continue
@@ -100,19 +107,17 @@ async def main():
     while True:
         print("Running REDDIT UFO + ALIENS scraper...")
 
+        await asyncio.sleep(5)  # 👈 anti-block delay
+
         all_posts = []
 
         try:
-            # 🛸 UFOs
             all_posts += scrape_subreddit("UFOs")
-
-            # 👽 Aliens
             all_posts += scrape_subreddit("aliens")
-
         except Exception as e:
             print("Scraping error:", e)
 
-        # 🚨 FORCE CONTENT IF EMPTY
+        # 🚨 FALLBACK (NEVER SILENT)
         if not all_posts:
             print("⚠️ No data — fallback triggered")
             all_posts.append((
