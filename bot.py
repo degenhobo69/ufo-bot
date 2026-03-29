@@ -4,7 +4,7 @@ import time
 from telegram import Bot
 
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
-CHAT_ID = "527677115"
+CHAT_ID = "@ufoalerts"
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 
