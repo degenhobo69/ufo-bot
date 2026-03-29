@@ -1,3 +1,4 @@
+print("🔥 NEW VERSION RUNNING 🔥")
 import asyncio
 import requests
 import time
