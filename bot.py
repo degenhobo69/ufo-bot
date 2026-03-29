@@ -1,4 +1,4 @@
-print("🚀 VERSION 3 LIVE 🚀")
+print("🚀 VERSION 4 LIVE (NO BLOCK) 🚀")
 
 import asyncio
 import requests
@@ -9,7 +9,6 @@ from telegram import Bot
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
 CHAT_ID = "@ufoalerts"
 
-# store sent links with timestamp
 sent = {}
 
 
@@ -24,13 +23,13 @@ def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
 
-# 🔴 RSS SCRAPER (NO BLOCK)
+# 🔴 RSS VIA PROXY (NO RATE LIMIT)
 def scrape_rss(subreddit):
-    url = f"https://www.reddit.com/r/{subreddit}/new/.rss"
+    url = f"https://r.jina.ai/http://www.reddit.com/r/{subreddit}/new/.rss"
 
     try:
         r = requests.get(url, timeout=10)
-        print(f"RSS Status ({subreddit}):", r.status_code)
+        print(f"Proxy RSS ({subreddit}):", r.status_code)
 
         if r.status_code != 200:
             return []
@@ -42,7 +41,7 @@ def scrape_rss(subreddit):
             title = item.find("title").text
             link = item.find("link").text
 
-            # ⏱ allow resend after 30 minutes
+            # allow resend after 30 min
             if link in sent and time.time() - sent[link] < 1800:
                 continue
 
@@ -63,18 +62,18 @@ async def main():
     subs = ["UFOs", "aliens", "HighStrangeness"]
 
     while True:
-        print("Running RSS scraper (STABLE)...")
+        print("Running PROXY scraper (NO BLOCK)...")
 
         all_posts = []
 
         try:
             for sub in subs:
                 all_posts += scrape_rss(sub)
-                await asyncio.sleep(3)  # prevent 429
+                await asyncio.sleep(2)
         except Exception as e:
             print("Scraping error:", e)
 
-        # 🚨 FALLBACK (never silent)
+        # fallback (never silent)
         if not all_posts:
             print("⚠️ No data — fallback triggered")
             all_posts.append((
@@ -82,10 +81,8 @@ async def main():
                 "https://reddit.com/r/UFOs"
             ))
 
-        # 🔥 LIMIT POSTS
         all_posts = all_posts[:5]
 
-        # 📤 SEND
         for title, link in all_posts:
 
             prefix = "🚨 BREAKING UFO INTEL" if is_breaking(title) else "🛸 UFO / ALIEN SIGNAL"
@@ -103,7 +100,7 @@ async def main():
             except Exception as e:
                 print("Telegram error:", e)
 
-        await asyncio.sleep(180)  # every 3 minutes
+        await asyncio.sleep(180)
 
 
 asyncio.run(main())
