@@ -1,4 +1,5 @@
-print("🔥 NEW VERSION RUNNING 🔥")
+print("🚀 VERSION 3 LIVE 🚀")
+
 import asyncio
 import requests
 import time
@@ -8,7 +9,8 @@ from telegram import Bot
 BOT_TOKEN = "8642772204:AAHzXM8h8i4vJdLZIx7j6wMLgV80AGwCN14"
 CHAT_ID = "@ufoalerts"
 
-sent = set()
+# store sent links with timestamp
+sent = {}
 
 
 # 🚨 BREAKING DETECTION
@@ -22,13 +24,13 @@ def summarize(text):
     return " ".join(text.split()[:10]) + "..."
 
 
-# 🔴 RSS SCRAPER (NO BLOCKING)
+# 🔴 RSS SCRAPER (NO BLOCK)
 def scrape_rss(subreddit):
     url = f"https://www.reddit.com/r/{subreddit}/new/.rss"
 
     try:
         r = requests.get(url, timeout=10)
-        print("RSS Status:", r.status_code)
+        print(f"RSS Status ({subreddit}):", r.status_code)
 
         if r.status_code != 200:
             return []
@@ -40,11 +42,12 @@ def scrape_rss(subreddit):
             title = item.find("title").text
             link = item.find("link").text
 
-            if link in sent:
+            # ⏱ allow resend after 30 minutes
+            if link in sent and time.time() - sent[link] < 1800:
                 continue
 
             posts.append((title, link))
-            sent.add(link)
+            sent[link] = time.time()
 
         return posts
 
@@ -57,26 +60,29 @@ def scrape_rss(subreddit):
 async def main():
     bot = Bot(token=BOT_TOKEN)
 
+    subs = ["UFOs", "aliens", "HighStrangeness"]
+
     while True:
-        print("Running RSS scraper (NO BLOCK)...")
+        print("Running RSS scraper (STABLE)...")
 
         all_posts = []
 
         try:
-            all_posts += scrape_rss("UFOs")
-            all_posts += scrape_rss("aliens")
+            for sub in subs:
+                all_posts += scrape_rss(sub)
+                await asyncio.sleep(3)  # prevent 429
         except Exception as e:
             print("Scraping error:", e)
 
-        # 🚨 FALLBACK
+        # 🚨 FALLBACK (never silent)
         if not all_posts:
             print("⚠️ No data — fallback triggered")
             all_posts.append((
-                "Monitoring UFO & alien activity... no major signals yet.",
+                "🛸 Monitoring UFO & alien activity… stay tuned for signals",
                 "https://reddit.com/r/UFOs"
             ))
 
-        # 🔥 LIMIT
+        # 🔥 LIMIT POSTS
         all_posts = all_posts[:5]
 
         # 📤 SEND
@@ -88,7 +94,8 @@ async def main():
                 f"{prefix}\n\n"
                 f"{title}\n\n"
                 f"🧠 {summarize(title)}\n\n"
-                f"🔗 {link}"
+                f"🔗 {link}\n\n"
+                f"⚡ Join: https://t.me/ufoalerts"
             )
 
             try:
@@ -96,7 +103,7 @@ async def main():
             except Exception as e:
                 print("Telegram error:", e)
 
-        await asyncio.sleep(120)  # every 2 minutes
+        await asyncio.sleep(180)  # every 3 minutes
 
 
 asyncio.run(main())
